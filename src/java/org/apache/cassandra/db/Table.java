@@ -399,6 +399,7 @@ public class Table
                     }
                 }
 
+                /*
                 // Sharding the lock is insufficient to avoid contention when there is a "hot" row, e.g., for
                 // hint writes when a node is down (keyed by target IP).  So it is worth special-casing the
                 // no-index case to avoid the synchronization.
@@ -419,10 +420,19 @@ public class Table
                     ignoreObsoleteMutations(cf, mutatedIndexedColumns, oldIndexedColumns);
 
                     cfs.apply(key, cf);
+                    // XXX: on write, all we need to do is add an index entry for the newly-written value
+                    // equiv of:
+                    // set users.users_birth_date_idx[2001][prothfuss] = null?
+                    // What happens if the mutation is a delete?
+                    // Sounds like we should check for a delete and do nothing, defer the
+                    // decision to basically Memtable
 
                     // ignore full index memtables -- we flush those when the "master" one is full
                     cfs.indexManager.applyIndexUpdates(mutation.key(), cf, mutatedIndexedColumns, oldIndexedColumns);
                 }
+                */
+                cfs.apply(key, cf);
+                
             }
         }
         finally
