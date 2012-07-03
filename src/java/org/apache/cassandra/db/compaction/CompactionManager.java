@@ -604,6 +604,7 @@ public class CompactionManager implements CompactionManagerMBean
                             if (indexedColumnsInRow != null && !indexedColumnsInRow.isEmpty())
                             {
                                 // acquire memtable lock here because secondary index deletion may cause a race. See CASSANDRA-3712
+                                // XXX: will this still be a race? probably ultimately addressed in the next step?
                                 Table.switchLock.readLock().lock();
                                 try
                                 {

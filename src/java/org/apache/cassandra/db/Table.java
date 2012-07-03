@@ -376,53 +376,15 @@ public class Table
                     continue;
                 }
 
-                SortedSet<ByteBuffer> mutatedIndexedColumns = null;
-                if (updateIndexes)
-                {
-                    for (ByteBuffer column : cfs.indexManager.getIndexedColumns())
-                    {
-                        if (cf.getColumnNames().contains(column) || cf.isMarkedForDelete())
-                        {
-                            if (mutatedIndexedColumns == null)
-                                mutatedIndexedColumns = new TreeSet<ByteBuffer>(cf.getComparator());
-                            mutatedIndexedColumns.add(column);
-                            if (logger.isDebugEnabled())
-                            {
-                                // can't actually use validator to print value here, because we overload value
-                                // for deletion timestamp as well (which may not be a well-formed value for the column type)
-                                ByteBuffer value = cf.getColumn(column) == null ? null : cf.getColumn(column).value(); // may be null on row-level deletion
-                                logger.debug(String.format("mutating indexed column %s value %s",
-                                                           cf.getComparator().getString(column),
-                                                           value == null ? "null" : ByteBufferUtil.bytesToHex(value)));
-                            }
-                        }
-                    }
-                }
+                SortedSet<ByteBuffer> indexAdditionColumns = updateIndexes
+                        ? findIndexAdditions(cf, cfs.indexManager.getIndexedColumns())
+                        : null;
 
-                // Sharding the lock is insufficient to avoid contention when there is a "hot" row, e.g., for
-                // hint writes when a node is down (keyed by target IP).  So it is worth special-casing the
-                // no-index case to avoid the synchronization.
-                if (mutatedIndexedColumns == null)
-                {
-                    cfs.apply(key, cf);
-                    continue;
-                }
-                // else mutatedIndexedColumns != null
-                synchronized (indexLockFor(mutation.key()))
-                {
-                    // with the raw data CF, we can just apply every update in any order and let
-                    // read-time resolution throw out obsolete versions, thus avoiding read-before-write.
-                    // but for indexed data we need to make sure that we're not creating index entries
-                    // for obsolete writes.
-                    ColumnFamily oldIndexedColumns = readCurrentIndexedColumns(key, cfs, mutatedIndexedColumns);
-                    logger.debug("Pre-mutation index row is {}", oldIndexedColumns);
-                    ignoreObsoleteMutations(cf, mutatedIndexedColumns, oldIndexedColumns);
-
-                    cfs.apply(key, cf);
-
-                    // ignore full index memtables -- we flush those when the "master" one is full
-                    cfs.indexManager.applyIndexUpdates(mutation.key(), cf, mutatedIndexedColumns, oldIndexedColumns);
-                }
+                cfs.apply(key, cf);
+                if (indexAdditionColumns != null)
+                    // NOTE: The index is inconsistent in between cfs.apply and applyIndexUpdates: this is
+                    // solved by read time resolution
+                    cfs.indexManager.applyIndexUpdates(mutation.key(), cf, indexAdditionColumns, null);
             }
         }
         finally
@@ -431,47 +393,26 @@ public class Table
         }
     }
 
-    private static void ignoreObsoleteMutations(ColumnFamily cf, SortedSet<ByteBuffer> mutatedIndexedColumns, ColumnFamily oldIndexedColumns)
+    /**
+     * Return the names of a RowMutation's ColumnFamily's Columns that require new secondary index entries.
+     */
+    private SortedSet<ByteBuffer> findIndexAdditions(ColumnFamily cf, SortedSet<ByteBuffer> indexedColumns)
     {
-        // DO NOT modify the cf object here, it can race w/ the CL write (see https://issues.apache.org/jira/browse/CASSANDRA-2604)
+        SortedSet<ByteBuffer> columns = null;
 
-        if (oldIndexedColumns == null)
-            return;
-
-        for (Iterator<ByteBuffer> iter = mutatedIndexedColumns.iterator(); iter.hasNext(); )
+        for (ByteBuffer indexedColumn : indexedColumns)
         {
-            ByteBuffer name = iter.next();
-            IColumn newColumn = cf.getColumn(name); // null == row delete or it wouldn't be marked Mutated
-            if (newColumn != null && cf.isMarkedForDelete())
+            IColumn column = cf.getColumn(indexedColumn);
+            if (column == null || column.isMarkedForDelete())
             {
-                // row is marked for delete, but column was also updated.  if column is timestamped less than
-                // the row tombstone, treat it as if it didn't exist.  Otherwise we don't care about row
-                // tombstone for the purpose of the index update and we can proceed as usual.
-                if (cf.deletionInfo().isDeleted(newColumn))
-                {
-                    // don't remove from the cf object; that can race w/ CommitLog write.  Leaving it is harmless.
-                    newColumn = null;
-                }
+                // Columns marked for deletion will have their indexes resolved @ read time
+                continue;
             }
-            IColumn oldColumn = oldIndexedColumns.getColumn(name);
-
-            // deletions are irrelevant to the index unless we're changing state from live -> deleted, i.e.,
-            // just updating w/ a newer tombstone doesn't matter
-            boolean bothDeleted = (newColumn == null || newColumn.isMarkedForDelete())
-                                  && (oldColumn == null || oldColumn.isMarkedForDelete());
-            // obsolete means either the row or the column timestamp we're applying is older than existing data
-            boolean obsoleteRowTombstone = newColumn == null && oldColumn != null && !cf.deletionInfo().isDeleted(oldColumn);
-            boolean obsoleteColumn = newColumn != null && (oldIndexedColumns.deletionInfo().isDeleted(newColumn)
-                                                           || (oldColumn != null && oldColumn.reconcile(newColumn) == oldColumn));
-
-            if (bothDeleted || obsoleteRowTombstone || obsoleteColumn)
-            {
-                if (logger.isDebugEnabled())
-                    logger.debug("skipping index update for obsolete mutation of " + cf.getComparator().getString(name));
-                iter.remove();
-                oldIndexedColumns.remove(name);
-            }
+            if (columns == null)
+                columns = new TreeSet<ByteBuffer>(cf.getComparator());
+            columns.add(column.name());
         }
+        return columns;
     }
 
     private static ColumnFamily readCurrentIndexedColumns(DecoratedKey key, ColumnFamilyStore cfs, SortedSet<ByteBuffer> mutatedIndexedColumns)

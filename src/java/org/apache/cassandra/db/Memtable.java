@@ -236,11 +236,67 @@ public class Memtable
                 previous = empty;
         }
 
-        long sizeDelta = previous.addAllWithSizeDelta(cf, allocator, localCopyFunction);
-        currentSize.addAndGet(sizeDelta);
+        ISortedColumns.AddResults addResults = previous.addAllWithResults(cf, allocator, localCopyFunction);
+        handleIndexDeletions(key, cf, previous, addResults);
+        currentSize.addAndGet(addResults.getSizeDelta());
         currentOperations.addAndGet((cf.getColumnCount() == 0)
                                     ? cf.isMarkedForDelete() ? 1 : 0
                                     : cf.getColumnCount());
+    }
+
+    /**
+     * Handle Column index deletions after an addAllWithResults call.
+     *
+     * If an indexed Column was updated in the Memtable we issue a delete for its index entry (since it won't be
+     * preserved in an SStable to be deleted at compaction time).
+     */
+    private void handleIndexDeletions(DecoratedKey key, ColumnFamily cf, ColumnFamily previous,
+                                      ISortedColumns.AddResults addResults)
+    {
+        Set<ByteBuffer> indexedColumns = cfs.indexManager.getIndexedColumns();
+        if (indexedColumns.size() == 0)
+            return;
+
+        Map<ByteBuffer, IColumn> overwrittenColumns = addResults.getOverwrittenColumns();
+        List<IColumn> overwrittenIndexedColumns = null;
+
+        // Gather explicitly overwritten indexed columns
+        if (overwrittenColumns.size() > 0)
+        {
+            overwrittenColumns.keySet().retainAll(indexedColumns);
+            overwrittenIndexedColumns = new ArrayList<IColumn>(overwrittenColumns.values());
+        }
+
+        // Then the implicitly overwritten indexed columns
+        if (cf.isMarkedForDelete())
+        {
+            // The entire row may have been deleted, check every indexed column for *new* deletions
+            for (ByteBuffer name: indexedColumns)
+            {
+                IColumn column = previous.getColumn(name);
+                if (column == null || !addResults.addedTombstoneFor(column))
+                    // The column wasn't already in the Memtable, was already tombstoned, or this row
+                    // deletion didn't affect it (bad timestamp). No index deletion necessary
+                    continue;
+
+                if (overwrittenIndexedColumns == null)
+                    overwrittenIndexedColumns = new ArrayList<IColumn>();
+                overwrittenIndexedColumns.add(column);
+            }
+        }
+
+        if (overwrittenIndexedColumns == null)
+            return;
+
+        try
+        {
+            cfs.indexManager.deleteFromIndexes(key, overwrittenIndexedColumns);
+        }
+        catch (IOException ioe)
+        {
+            throw new RuntimeException(ioe);
+        }
+
     }
 
     // for debugging

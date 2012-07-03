@@ -27,7 +27,7 @@ import edu.stanford.ppl.concurrent.SnapTreeMap;
 import org.apache.cassandra.db.filter.ColumnSlice;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.utils.Allocator;
-
+import org.apache.cassandra.utils.Pair;
 
 /**
  * A thread-safe and atomic ISortedColumns implementation.
@@ -160,7 +160,15 @@ public class AtomicSortedColumns implements ISortedColumns
         addAllWithSizeDelta(cm, allocator, transformation);
     }
 
+    @Override
     public long addAllWithSizeDelta(ISortedColumns cm, Allocator allocator, Function<IColumn, IColumn> transformation)
+    {
+        return addAllWithResults(cm, allocator, transformation).getSizeDelta();
+    }
+
+    @Override
+    public ISortedColumns.AddResults addAllWithResults(ISortedColumns cm, Allocator allocator,
+                                                       Function<IColumn, IColumn> transformation)
     {
         /*
          * This operation needs to atomicity and isolation. To that end, we
@@ -175,18 +183,25 @@ public class AtomicSortedColumns implements ISortedColumns
          */
         Holder current, modified;
         long sizeDelta;
+        Map<ByteBuffer, IColumn> overwrittenColumns;
+        DeletionInfo oldDelInfo, newDelInfo;
 
         main_loop:
         do
         {
             sizeDelta = 0;
+            overwrittenColumns = new LinkedHashMap<ByteBuffer, IColumn>();
             current = ref.get();
-            DeletionInfo newDelInfo = current.deletionInfo.add(cm.getDeletionInfo());
+            oldDelInfo = current.deletionInfo;
+            newDelInfo = current.deletionInfo.add(cm.getDeletionInfo());
             modified = new Holder(current.map.clone(), newDelInfo);
 
             for (IColumn column : cm.getSortedColumns())
             {
-                sizeDelta += modified.addColumn(transformation.apply(column), allocator);
+                Pair<Integer, IColumn> result = modified.addColumn(transformation.apply(column), allocator);
+                sizeDelta += result.left;
+                if (result.right != null)
+                    overwrittenColumns.put(column.name(), result.right);
                 // bail early if we know we've been beaten
                 if (ref.get() != current)
                     continue main_loop;
@@ -194,7 +209,7 @@ public class AtomicSortedColumns implements ISortedColumns
         }
         while (!ref.compareAndSet(current, modified));
 
-        return sizeDelta;
+        return new ISortedColumns.AddResults(sizeDelta, overwrittenColumns, oldDelInfo, newDelInfo);
     }
 
     public boolean replace(IColumn oldColumn, IColumn newColumn)
@@ -335,33 +350,9 @@ public class AtomicSortedColumns implements ISortedColumns
             return new Holder(new SnapTreeMap<ByteBuffer, IColumn>(map.comparator()), deletionInfo);
         }
 
-        long addColumn(IColumn column, Allocator allocator)
+        Pair<Integer, IColumn> addColumn(IColumn column, Allocator allocator)
         {
-            ByteBuffer name = column.name();
-            while (true)
-            {
-                IColumn oldColumn = map.putIfAbsent(name, column);
-                if (oldColumn == null)
-                    return column.dataSize();
-
-                if (oldColumn instanceof SuperColumn)
-                {
-                    assert column instanceof SuperColumn;
-                    long previousSize = oldColumn.dataSize();
-                    ((SuperColumn) oldColumn).putColumn((SuperColumn)column, allocator);
-                    return oldColumn.dataSize() - previousSize;
-                }
-                else
-                {
-                    // calculate reconciled col from old (existing) col and new col
-                    IColumn reconciledColumn = column.reconcile(oldColumn, allocator);
-                    if (map.replace(name, oldColumn, reconciledColumn))
-                        return reconciledColumn.dataSize() - oldColumn.dataSize();
-
-                    // We failed to replace column due to a concurrent update or a concurrent removal. Keep trying.
-                    // (Currently, concurrent removal should not happen (only updates), but let us support that anyway.)
-                }
-            }
+            return ThreadSafeSortedColumns.addColumn(map, column, allocator);
         }
 
         void retainAll(ISortedColumns columns)

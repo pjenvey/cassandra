@@ -96,6 +96,14 @@ public abstract class AbstractThreadUnsafeSortedColumns implements ISortedColumn
         throw new UnsupportedOperationException();
     }
 
+    @Override
+    public ISortedColumns.AddResults addAllWithResults(ISortedColumns cm, Allocator allocator,
+                                                       Function<IColumn, IColumn> transformation)
+    {
+        // AddResults is only needed by memtable updates which should not be using thread-unsafe containers
+        throw new UnsupportedOperationException();
+    }
+
     public abstract void addAll(ISortedColumns columns, Allocator allocator, Function<IColumn, IColumn> transformation);
 
     public boolean isEmpty()

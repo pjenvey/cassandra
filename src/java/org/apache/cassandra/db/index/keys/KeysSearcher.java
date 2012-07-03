@@ -23,6 +23,7 @@ import java.util.*;
 
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.*;
+import org.apache.cassandra.db.index.PerColumnSecondaryIndex;
 import org.apache.cassandra.db.index.SecondaryIndex;
 import org.apache.cassandra.db.index.SecondaryIndexManager;
 import org.apache.cassandra.db.index.SecondaryIndexSearcher;
@@ -196,10 +197,44 @@ public class KeysSearcher extends SecondaryIndexSearcher
                         // While the column family we'll get in the end should contains the primary clause column, the initialFilter may not have found it and can thus be null
                         if (data == null)
                             data = ColumnFamily.create(baseCfs.metadata);
+
+                        IColumn indexedColumn = data.getColumn(primary.column_name);
+                        if (indexedColumn == null || indexedColumn.isMarkedForDelete()
+                            || !primary.value.equals(indexedColumn.value()))
+                        {
+                            if (logger.isDebugEnabled())
+                            {
+                                String columnDesc = indexedColumn == null || indexedColumn.isMarkedForDelete()
+                                        ? "deleted column"
+                                        : String.format("%s %s", baseCfs.getComparator().getString(indexedColumn.name()),
+                                                        ByteBufferUtil.bytesToHex(indexedColumn.value()));
+                                logger.debug("Read-resolving stale index entry {} for {}",
+                                             ByteBufferUtil.bytesToHex(indexKey.key),
+                                             columnDesc);
+                            }
+                            deleteIndexColumn(index, indexKey, column);
+                            continue;
+                        }
                         return new Row(dk, data);
                     }
                  }
              }
+
+            private void deleteIndexColumn(SecondaryIndex index, DecoratedKey indexKey, IColumn indexColumn)
+            {
+                if (!(index instanceof PerColumnSecondaryIndex))
+                    throw new RuntimeException("KeysSearcher operates on PerColumnSecondaryIndexes, not "
+                                               + index.getClass().getName());
+                PerColumnSecondaryIndex pcsIndex = (PerColumnSecondaryIndex) index;
+                try
+                {
+                    pcsIndex.deleteColumn(indexKey, indexColumn.name(), indexColumn);
+                }
+                catch (IOException ioe)
+                {
+                    throw new RuntimeException(ioe);
+                }
+            }
 
             public void close() throws IOException {}
         };

@@ -41,6 +41,9 @@ import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.lang.StringUtils;
 import org.junit.Test;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static org.junit.Assert.assertNull;
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertSame;
@@ -79,6 +82,8 @@ import org.apache.cassandra.utils.WrappedRunnable;
 
 public class ColumnFamilyStoreTest extends SchemaLoader
 {
+    private static Logger logger = LoggerFactory.getLogger(ColumnFamilyStoreTest.class);
+
     static byte[] bytes1, bytes2;
 
     static
@@ -312,14 +317,14 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         String key = ByteBufferUtil.string(rows.get(0).key.key);
         assert "k1".equals( key );
 
-        // delete the column directly
+        logger.debug("delete the column directly");
         rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
         rm.delete(new QueryPath("Indexed1", null, ByteBufferUtil.bytes("birthdate")), 1);
         rm.apply();
         rows = cfs.search(clause, range, 100, filter);
         assert rows.isEmpty();
 
-        // verify that it's not being indexed under the deletion column value either
+        logger.debug("verify that it's not being indexed under the deletion column value either");
         IColumn deletion = rm.getColumnFamilies().iterator().next().iterator().next();
         ByteBuffer deletionLong = ByteBufferUtil.bytes((long) ByteBufferUtil.toInt(deletion.value()));
         IndexExpression expr0 = new IndexExpression(ByteBufferUtil.bytes("birthdate"), IndexOperator.EQ, deletionLong);
@@ -327,7 +332,7 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         rows = cfs.search(clause0, range, 100, filter);
         assert rows.isEmpty();
 
-        // resurrect w/ a newer timestamp
+        logger.debug("resurrect w/ a newer timestamp");
         rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
         rm.add(new QueryPath("Indexed1", null, ByteBufferUtil.bytes("birthdate")), ByteBufferUtil.bytes(1L), 2);
         rm.apply();
@@ -336,7 +341,7 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         key = ByteBufferUtil.string(rows.get(0).key.key);
         assert "k1".equals( key );
 
-        // verify that row and delete w/ older timestamp does nothing
+        logger.debug("verify that row and delete w/ older timestamp does nothing");
         rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
         rm.delete(new QueryPath("Indexed1"), 1);
         rm.apply();
@@ -345,7 +350,7 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         key = ByteBufferUtil.string(rows.get(0).key.key);
         assert "k1".equals( key );
 
-        // similarly, column delete w/ older timestamp should do nothing
+        logger.debug("similarly, column delete w/ older timestamp should do nothing");
         rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
         rm.delete(new QueryPath("Indexed1", null, ByteBufferUtil.bytes("birthdate")), 1);
         rm.apply();
@@ -354,21 +359,21 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         key = ByteBufferUtil.string(rows.get(0).key.key);
         assert "k1".equals( key );
 
-        // delete the entire row (w/ newer timestamp this time)
+        logger.debug("delete the entire row (w/ newer timestamp this time)");
         rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
         rm.delete(new QueryPath("Indexed1"), 3);
         rm.apply();
         rows = cfs.search(clause, range, 100, filter);
         assert rows.isEmpty() : StringUtils.join(rows, ",");
 
-        // make sure obsolete mutations don't generate an index entry
+        logger.debug("make sure obsolete mutations don't generate an index entry");
         rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
         rm.add(new QueryPath("Indexed1", null, ByteBufferUtil.bytes("birthdate")), ByteBufferUtil.bytes(1L), 3);
         rm.apply();
         rows = cfs.search(clause, range, 100, filter);
         assert rows.isEmpty() : StringUtils.join(rows, ",");
 
-        // try insert followed by row delete in the same mutation
+        logger.debug("try insert followed by row delete in the same mutation");
         rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
         rm.add(new QueryPath("Indexed1", null, ByteBufferUtil.bytes("birthdate")), ByteBufferUtil.bytes(1L), 1);
         rm.delete(new QueryPath("Indexed1"), 2);
@@ -376,7 +381,7 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         rows = cfs.search(clause, range, 100, filter);
         assert rows.isEmpty() : StringUtils.join(rows, ",");
 
-        // try row delete followed by insert in the same mutation
+        logger.debug("try row delete followed by insert in the same mutation");
         rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
         rm.delete(new QueryPath("Indexed1"), 3);
         rm.add(new QueryPath("Indexed1", null, ByteBufferUtil.bytes("birthdate")), ByteBufferUtil.bytes(1L), 4);

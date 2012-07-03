@@ -92,6 +92,12 @@ public abstract class AbstractColumnContainer implements IColumnContainer, IIter
         return columns.addAllWithSizeDelta(cc.columns, allocator, transformation);
     }
 
+    public ISortedColumns.AddResults addAllWithResults(AbstractColumnContainer cc, Allocator allocator,
+                                                       Function<IColumn, IColumn> transformation)
+    {
+        return columns.addAllWithResults(cc.columns, allocator, transformation);
+    }
+
     public void addAll(AbstractColumnContainer cc, Allocator allocator, Function<IColumn, IColumn> transformation)
     {
         columns.addAll(cc.columns, allocator, transformation);

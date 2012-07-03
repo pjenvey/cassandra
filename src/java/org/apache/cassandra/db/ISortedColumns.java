@@ -20,6 +20,7 @@ package org.apache.cassandra.db;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.SortedMap;
 import java.util.SortedSet;
 
@@ -64,6 +65,15 @@ public interface ISortedColumns extends IIterableColumns
     public void addColumn(IColumn column, Allocator allocator);
 
     /**
+     * Like addAllWithResults, but only returns the size delta seen after merging the columns.
+     *
+     * @return the difference in size seen after merging the given columns
+     *
+     * @see #addAllWithResults
+     */
+    public long addAllWithSizeDelta(ISortedColumns cm, Allocator allocator, Function<IColumn, IColumn> transformation);
+
+    /**
      * Adds all the columns of a given column map to this column map.
      * This is equivalent to:
      *   <code>
@@ -72,9 +82,10 @@ public interface ISortedColumns extends IIterableColumns
      *   </code>
      *  but is potentially faster.
      *
-     *  @return the difference in size seen after merging the given columns
+     *  @return results of the operation that may pertain to the caller
      */
-    public long addAllWithSizeDelta(ISortedColumns cm, Allocator allocator, Function<IColumn, IColumn> transformation);
+    public AddResults addAllWithResults(ISortedColumns cm, Allocator allocator,
+                                        Function<IColumn, IColumn> transformation);
 
     /**
      * Adds the columns without necessarily computing the size delta
@@ -171,5 +182,36 @@ public interface ISortedColumns extends IIterableColumns
          * See {@code create} for the description of {@code insertReversed}
          */
         public ISortedColumns fromSorted(SortedMap<ByteBuffer, IColumn> sm, boolean insertReversed);
+    }
+
+    /**
+     * Results of an addAllWithResults operation that might pertain to the caller.
+     */
+    public class AddResults
+    {
+        private final long sizeDelta;
+        private final Map<ByteBuffer, IColumn> overwrittenColumns;
+        private final DeletionInfo oldDeletionInfo;
+        private final DeletionInfo newDeletionInfo;
+
+        public AddResults(long sizeDelta, Map<ByteBuffer, IColumn> overwrittenColumns, DeletionInfo oldDeletionInfo,
+                          DeletionInfo newDeletionInfo)
+        {
+            this.sizeDelta = sizeDelta;
+            this.overwrittenColumns = overwrittenColumns;
+            this.oldDeletionInfo = oldDeletionInfo;
+            this.newDeletionInfo = newDeletionInfo;
+        }
+
+        /**
+         * Determine if the specified Column was deleted by this add operation (and wasn't previously marked
+         * for deletion).
+         */
+        public boolean addedTombstoneFor(IColumn column) {
+            return !oldDeletionInfo.isDeleted(column) && newDeletionInfo.isDeleted(column);
+        }
+
+        public long getSizeDelta() { return sizeDelta; }
+        public Map<ByteBuffer, IColumn> getOverwrittenColumns() { return overwrittenColumns; }
     }
 }
