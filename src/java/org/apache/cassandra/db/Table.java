@@ -386,15 +386,12 @@ public class Table
                 {
                     for (ByteBuffer indexedColumn : cfs.indexManager.getIndexedColumns())
                     {
-                        // column = birth_date
-                        //if (cf.getColumnNames().contains(column))
                         IColumn column = cf.getColumn(indexedColumn);
                         if (column == null || column.isMarkedForDelete())
                         {
-                            // The index will resync later..
+                            // This inconsistency will be resolved @ read time
                             continue;
                         }
-                        // The RowMutation involves the (indexed) birth_date column
                         if (newValueColumns == null)
                             newValueColumns = new TreeSet<ByteBuffer>(cf.getComparator());
                         newValueColumns.add(column.name());
@@ -410,41 +407,9 @@ public class Table
                     }
                 }
 
-                // Sharding the lock is insufficient to avoid contention when there is a "hot" row, e.g., for
-                // hint writes when a node is down (keyed by target IP).  So it is worth special-casing the
-                // no-index case to avoid the synchronization.
-                /*
-                if (mutatedIndexedColumns == null)
-                {
-                    cfs.apply(key, cf);
-                    continue;
-                }
-                // else mutatedIndexedColumns != null
-                synchronized (indexLockFor(mutation.key()))
-                {
-                    // with the raw data CF, we can just apply every update in any order and let
-                    // read-time resolution throw out obsolete versions, thus avoiding read-before-write.
-                    // but for indexed data we need to make sure that we're not creating index entries
-                    // for obsolete writes.
-                    ColumnFamily oldIndexedColumns = readCurrentIndexedColumns(key, cfs, mutatedIndexedColumns);
-                    logger.debug("Pre-mutation index row is {}", oldIndexedColumns);
-                    ignoreObsoleteMutations(cf, mutatedIndexedColumns, oldIndexedColumns);
-
-                    cfs.apply(key, cf);
-                    // XXX: on write, all we need to do is add an index entry for the newly-written value
-                    // equiv of:
-                    // set users.users_birth_date_idx[2001][prothfuss] = null?
-                    // What happens if the mutation is a delete?
-                    // Sounds like we should check for a delete and do nothing, defer the
-                    // decision to basically Memtable
-
-                    // ignore full index memtables -- we flush those when the "master" one is full
-                    cfs.indexManager.applyIndexUpdates(mutation.key(), cf, mutatedIndexedColumns, oldIndexedColumns);
-                }
-                */
-                // XXX: commit log?
                 cfs.apply(key, cf);
                 if (newValueColumns != null) {
+                    // Read time resolution will throw out obsolete index keys, so no need to synchronized with apply()
                     cfs.indexManager.applyIndexUpdates(mutation.key(), cf, newValueColumns, null);
                 }
             }
@@ -452,49 +417,6 @@ public class Table
         finally
         {
             switchLock.readLock().unlock();
-        }
-    }
-
-    private static void ignoreObsoleteMutations(ColumnFamily cf, SortedSet<ByteBuffer> mutatedIndexedColumns, ColumnFamily oldIndexedColumns)
-    {
-        // DO NOT modify the cf object here, it can race w/ the CL write (see https://issues.apache.org/jira/browse/CASSANDRA-2604)
-
-        if (oldIndexedColumns == null)
-            return;
-
-        for (Iterator<ByteBuffer> iter = mutatedIndexedColumns.iterator(); iter.hasNext(); )
-        {
-            ByteBuffer name = iter.next();
-            IColumn newColumn = cf.getColumn(name); // null == row delete or it wouldn't be marked Mutated
-            if (newColumn != null && cf.isMarkedForDelete())
-            {
-                // row is marked for delete, but column was also updated.  if column is timestamped less than
-                // the row tombstone, treat it as if it didn't exist.  Otherwise we don't care about row
-                // tombstone for the purpose of the index update and we can proceed as usual.
-                if (cf.deletionInfo().isDeleted(newColumn))
-                {
-                    // don't remove from the cf object; that can race w/ CommitLog write.  Leaving it is harmless.
-                    newColumn = null;
-                }
-            }
-            IColumn oldColumn = oldIndexedColumns.getColumn(name);
-
-            // deletions are irrelevant to the index unless we're changing state from live -> deleted, i.e.,
-            // just updating w/ a newer tombstone doesn't matter
-            boolean bothDeleted = (newColumn == null || newColumn.isMarkedForDelete())
-                                  && (oldColumn == null || oldColumn.isMarkedForDelete());
-            // obsolete means either the row or the column timestamp we're applying is older than existing data
-            boolean obsoleteRowTombstone = newColumn == null && oldColumn != null && !cf.deletionInfo().isDeleted(oldColumn);
-            boolean obsoleteColumn = newColumn != null && (oldIndexedColumns.deletionInfo().isDeleted(newColumn)
-                                                           || (oldColumn != null && oldColumn.reconcile(newColumn) == oldColumn));
-
-            if (bothDeleted || obsoleteRowTombstone || obsoleteColumn)
-            {
-                if (logger.isDebugEnabled())
-                    logger.debug("skipping index update for obsolete mutation of " + cf.getComparator().getString(name));
-                iter.remove();
-                oldIndexedColumns.remove(name);
-            }
         }
     }
 
