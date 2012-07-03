@@ -369,6 +369,11 @@ public class Table
             DecoratedKey key = StorageService.getPartitioner().decorateKey(mutation.key());
             for (ColumnFamily cf : mutation.getColumnFamilies())
             {
+                if (cf.isMarkedForDelete())
+                {
+                    // The index will resync later..
+                    continue;
+                }
                 ColumnFamilyStore cfs = columnFamilyStores.get(cf.id());
                 if (cfs == null)
                 {
@@ -376,33 +381,39 @@ public class Table
                     continue;
                 }
 
-                SortedSet<ByteBuffer> mutatedIndexedColumns = null;
+                SortedSet<ByteBuffer> newValueColumns = null;
                 if (updateIndexes)
                 {
-                    for (ByteBuffer column : cfs.indexManager.getIndexedColumns())
+                    for (ByteBuffer indexedColumn : cfs.indexManager.getIndexedColumns())
                     {
-                        if (cf.getColumnNames().contains(column) || cf.isMarkedForDelete())
+                        // column = birth_date
+                        //if (cf.getColumnNames().contains(column))
+                        IColumn column = cf.getColumn(indexedColumn);
+                        if (column == null || column.isMarkedForDelete())
                         {
-                            if (mutatedIndexedColumns == null)
-                                mutatedIndexedColumns = new TreeSet<ByteBuffer>(cf.getComparator());
-                            mutatedIndexedColumns.add(column);
-                            if (logger.isDebugEnabled())
-                            {
-                                // can't actually use validator to print value here, because we overload value
-                                // for deletion timestamp as well (which may not be a well-formed value for the column type)
-                                ByteBuffer value = cf.getColumn(column) == null ? null : cf.getColumn(column).value(); // may be null on row-level deletion
-                                logger.debug(String.format("mutating indexed column %s value %s",
-                                                           cf.getComparator().getString(column),
-                                                           value == null ? "null" : ByteBufferUtil.bytesToHex(value)));
-                            }
+                            // The index will resync later..
+                            continue;
+                        }
+                        // The RowMutation involves the (indexed) birth_date column
+                        if (newValueColumns == null)
+                            newValueColumns = new TreeSet<ByteBuffer>(cf.getComparator());
+                        newValueColumns.add(column.name());
+                        if (logger.isDebugEnabled())
+                        {
+                            // can't actually use validator to print value here, because we overload value
+                            // for deletion timestamp as well (which may not be a well-formed value for the column type)
+                            ByteBuffer value = column == null ? null : column.value(); // may be null on row-level deletion
+                            logger.debug(String.format("mutating indexed column %s value %s",
+                                                       cf.getComparator().getString(indexedColumn), // XXX: getString blah
+                                                       value == null ? "null" : ByteBufferUtil.bytesToHex(value)));
                         }
                     }
                 }
 
-                /*
                 // Sharding the lock is insufficient to avoid contention when there is a "hot" row, e.g., for
                 // hint writes when a node is down (keyed by target IP).  So it is worth special-casing the
                 // no-index case to avoid the synchronization.
+                /*
                 if (mutatedIndexedColumns == null)
                 {
                     cfs.apply(key, cf);
@@ -431,8 +442,11 @@ public class Table
                     cfs.indexManager.applyIndexUpdates(mutation.key(), cf, mutatedIndexedColumns, oldIndexedColumns);
                 }
                 */
+                // XXX: commit log?
                 cfs.apply(key, cf);
-                
+                if (newValueColumns != null) {
+                    cfs.indexManager.applyIndexUpdates(mutation.key(), cf, newValueColumns, null);
+                }
             }
         }
         finally

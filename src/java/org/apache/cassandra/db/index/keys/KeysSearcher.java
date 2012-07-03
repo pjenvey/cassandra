@@ -200,10 +200,11 @@ public class KeysSearcher extends SecondaryIndexSearcher
                         final SecondaryIndex index2 = index;
                         final DecoratedKey indexKey2 = indexKey;
                         */
-                        IColumn indexedColumn = data.getColumn(primary.column_name);
+                        IColumn indexedColumn = data.getColumn(primary.column_name); // could be null?
                         // XXX: 
-                        if (!primary.value.equals(indexedColumn.value()))
+                        if (indexedColumn == null || !primary.value.equals(indexedColumn.value()))
                         {
+                            /*
                             // This index entry is stale: delete it
                             // XXX: getIndexCfs().table.name maybe -> getIndexCfs().getColumnFamilyName()
                             // XXX: arg. table.name is that right? isn't that the keyspace name?
@@ -221,6 +222,30 @@ public class KeysSearcher extends SecondaryIndexSearcher
                             catch (IOException ioe)
                             {
                                 throw new RuntimeException(ioe);
+                            }
+                            */
+                            // XXX: insertcolumn does
+                            // logger.debug("applying index row {} in {}", indexCfs.metadata.getKeyValidator().getString(valueKey.key), cfi);
+                            // DEBUG [MutationStage:9] 2012-07-03 16:28:43,613 KeysIndex.java (line 118) applying index row 1968 in ColumnFamily(users.users_birth_date_idx [687461796c6572:false:0@1341358123580000,])
+                            // DEBUG [Thrift:1] 2012-07-03 16:29:59,521 KeysSearcher.java (line 228) Updating stale index entry for DecoratedKey(1968, 00000000000007b0) java.nio.HeapByteBuffer[pos=0 lim=7 cap=7]
+
+
+                            if (logger.isDebugEnabled())
+                                logger.debug("Updating stale index entry for {} {}", indexKey, column.name());
+                            if (index instanceof org.apache.cassandra.db.index.PerRowSecondaryIndex)
+                            {
+                                throw new RuntimeException("Not Implemented");
+                            }
+                            else
+                            {
+                                try
+                                {
+                                    ((org.apache.cassandra.db.index.PerColumnSecondaryIndex) index).deleteColumn(indexKey, column.name(), indexedColumn);
+                                }
+                                catch (IOException ioe)
+                                {
+                                    throw new RuntimeException(ioe);
+                                }
                             }
                         }
                         return new Row(dk, data);
