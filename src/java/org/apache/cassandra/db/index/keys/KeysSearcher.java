@@ -195,43 +195,13 @@ public class KeysSearcher extends SecondaryIndexSearcher
                         // While the column family we'll get in the end should contains the primary clause column, the initialFilter may not have found it and can thus be null
                         if (data == null)
                             data = ColumnFamily.create(baseCfs.metadata);
-                        /*
-                        final IndexExpression primary2 = primary;
-                        final SecondaryIndex index2 = index;
-                        final DecoratedKey indexKey2 = indexKey;
-                        */
-                        IColumn indexedColumn = data.getColumn(primary.column_name); // could be null?
-                        // XXX: 
+                        IColumn indexedColumn = data.getColumn(primary.column_name);
                         if (indexedColumn == null || !primary.value.equals(indexedColumn.value()))
                         {
-                            /*
-                            // This index entry is stale: delete it
-                            // XXX: getIndexCfs().table.name maybe -> getIndexCfs().getColumnFamilyName()
-                            // XXX: arg. table.name is that right? isn't that the keyspace name?
-                            // RM("demo", "1973")
-                            // rm.delete(QP("users.etc", null, "prothfuss"))
-                            // XXX: probably don't have to use RowMutation here (Can I delete directly from indexRow?)
-                            RowMutation rm = new RowMutation(index.getIndexCfs().table.name, primary.value);
-                            rm.delete(new QueryPath(index.getIndexCfs().getColumnFamilyName(), null, column.name()),
-                                      indexedColumn.timestamp());
-                            try
-                            {
-                                // XXX: Commit Log?
-                                rm.apply();
-                            }
-                            catch (IOException ioe)
-                            {
-                                throw new RuntimeException(ioe);
-                            }
-                            */
-                            // XXX: insertcolumn does
-                            // logger.debug("applying index row {} in {}", indexCfs.metadata.getKeyValidator().getString(valueKey.key), cfi);
-                            // DEBUG [MutationStage:9] 2012-07-03 16:28:43,613 KeysIndex.java (line 118) applying index row 1968 in ColumnFamily(users.users_birth_date_idx [687461796c6572:false:0@1341358123580000,])
-                            // DEBUG [Thrift:1] 2012-07-03 16:29:59,521 KeysSearcher.java (line 228) Updating stale index entry for DecoratedKey(1968, 00000000000007b0) java.nio.HeapByteBuffer[pos=0 lim=7 cap=7]
-
-
                             if (logger.isDebugEnabled())
                                 logger.debug("Updating stale index entry for {} {}", indexKey, column.name());
+
+                            // XXX: refactor this cut&paste out of SecondaryIndexManager.applyIndexUpdates
                             if (index instanceof org.apache.cassandra.db.index.PerRowSecondaryIndex)
                             {
                                 throw new RuntimeException("Not Implemented");
