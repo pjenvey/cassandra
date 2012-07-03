@@ -56,7 +56,6 @@ public class KeysSearcher extends SecondaryIndexSearcher
             SecondaryIndex index = indexManager.getIndexForColumn(expression.column_name);
             if (index == null || (expression.op != IndexOperator.EQ))
                 continue;
-            // XXX: What is getMeanColumns? #see DataTracker.getMeanColumns
             int columns = index.getIndexCfs().getMeanColumns();
             if (columns < bestMeanCount)
             {
@@ -94,16 +93,11 @@ public class KeysSearcher extends SecondaryIndexSearcher
         // Start with the most-restrictive indexed clause, then apply remaining clauses
         // to each row matching that clause.
         // TODO: allow merge join instead of just one index + loop
-        logger.info("A test1");
-        System.out.println("a test2");
-        System.err.println("a test2");
         final IndexExpression primary = highestSelectivityPredicate(filter.getClause());
         final SecondaryIndex index = indexManager.getIndexForColumn(primary.column_name);
         if (logger.isDebugEnabled())
             logger.debug("Primary scan clause is " + baseCfs.getComparator().getString(primary.column_name));
         assert index != null;
-        // primary.column_name = "birth_date", primary.value = ? (not UTF8)
-        // indexKey = "DecoratedKey(1973, 00000000000007b5)"
         final DecoratedKey indexKey = indexManager.getIndexKeyFor(primary.column_name, primary.value);
 
         /*
@@ -125,7 +119,6 @@ public class KeysSearcher extends SecondaryIndexSearcher
             protected Row computeNext()
             {
                 int meanColumns = Math.max(index.getIndexCfs().getMeanColumns(), 1);
-                // XXX: What exactly does rowsPerQuery mean here?
                 // We shouldn't fetch only 1 row as this provides buggy paging in case the first row doesn't satisfy all clauses
                 int rowsPerQuery = Math.max(Math.min(filter.maxRows(), filter.maxColumns() / meanColumns), 2);
                 while (true)
@@ -197,41 +190,6 @@ public class KeysSearcher extends SecondaryIndexSearcher
                             logger.debug("Skipping entry {} outside of assigned scan range", dk.token);
                             continue;
                         }
-                        // XXX: likely here, (though maybe above -- maybe even above
-                        // isMarkedForDelete()?)
-                        //
-                        // How does iterating columns relate to a new Row() below??
-                        // A 'row' is really just a key to an entry in a ColumnFamily i
-                        // suppose. a 'Row' is probably a deferred lookup for later then?
-
-                        // It seems like CassandraServer will just iterate through a
-                        // ColumnFamily (ie thriftifyKeySlices just calls
-                        // thriftifyColumnFamily). Is a CF in that case a subset of a real
-                        // CF?
-                        //
-                        // It's really time for some test code so I can analyze what all
-                        // this stuff is exactly doing.
-
-                        // So it looks like CFS.getColumnFamily takes a filter (see
-                        // below). So it would actually return a CF that is filtered
-                        // (subset).
-                        //
-                        // double-check the rows returned by the index to make sure the
-                        // column value still matches the indexed one; if it does not,
-                        // delete the index entry (with timestamp of original insert, so a
-                        // new update w/ the same value doesn't get clobbered) so we don't
-                        // keep making the same mistake
-
-                        // XXX: Column's name is 'prothfuss'.. value is an empty byetbuffer
-                        // users.users_birth_date_idx should then look like this:
-                        // "users.users_birth_date_idx" {
-                        //     "1973" {
-                        //         "prothfuss": null,
-                        //         "jjenvey": null,
-                        //     }
-                        // }
-
-                        logger.info("A test");
                         logger.debug("Returning index hit for {}", dk);
                         ColumnFamily data = baseCfs.getColumnFamily(new QueryFilter(dk, path, filter.initialFilter()));
                         // While the column family we'll get in the end should contains the primary clause column, the initialFilter may not have found it and can thus be null
@@ -250,15 +208,6 @@ public class KeysSearcher extends SecondaryIndexSearcher
                                 throw new RuntimeException(); // XXX:
                             }
                         }
-                        
-                        // XXX: somehow look at data and consider if primary.column_name
-                        // is still equal. if not, we have to delete the index entry (With
-                        // timestamp of original insert)
-                        //if (data.getColumn(primary.column_name)
-                        // if (isStaleIndex(primary.column_name, data)) {
-                        //     delete from the index..
-                        //     continue
-                        
                         return new Row(dk, data);
                     }
                  }
