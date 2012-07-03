@@ -195,17 +195,32 @@ public class KeysSearcher extends SecondaryIndexSearcher
                         // While the column family we'll get in the end should contains the primary clause column, the initialFilter may not have found it and can thus be null
                         if (data == null)
                             data = ColumnFamily.create(baseCfs.metadata);
+                        /*
+                        final IndexExpression primary2 = primary;
+                        final SecondaryIndex index2 = index;
+                        final DecoratedKey indexKey2 = indexKey;
+                        */
                         IColumn indexedColumn = data.getColumn(primary.column_name);
-                        if (!primary.value.equals(indexedColumn.value())) {
+                        // XXX: 
+                        if (!primary.value.equals(indexedColumn.value()))
+                        {
                             // This index entry is stale: delete it
                             // XXX: getIndexCfs().table.name maybe -> getIndexCfs().getColumnFamilyName()
+                            // XXX: arg. table.name is that right? isn't that the keyspace name?
+                            // RM("demo", "1973")
+                            // rm.delete(QP("users.etc", null, "prothfuss"))
+                            // XXX: probably don't have to use RowMutation here (Can I delete directly from indexRow?)
                             RowMutation rm = new RowMutation(index.getIndexCfs().table.name, primary.value);
-                            rm.delete(new QueryPath(index.getIndexCfs().table.name, null, column.name()),
+                            rm.delete(new QueryPath(index.getIndexCfs().getColumnFamilyName(), null, column.name()),
                                       indexedColumn.timestamp());
-                            try {
-                                rm.apply(); // hrmm
-                            } catch (IOException ioe) {
-                                throw new RuntimeException(); // XXX:
+                            try
+                            {
+                                // XXX: Commit Log?
+                                rm.apply();
+                            }
+                            catch (IOException ioe)
+                            {
+                                throw new RuntimeException(ioe);
                             }
                         }
                         return new Row(dk, data);
