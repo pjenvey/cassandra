@@ -218,6 +218,7 @@ public class KeysSearcher extends SecondaryIndexSearcher
                                     throw new RuntimeException(ioe);
                                 }
                             }
+                            continue;
                         }
                         return new Row(dk, data);
                     }
