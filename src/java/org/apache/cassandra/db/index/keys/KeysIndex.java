@@ -91,6 +91,11 @@ public class KeysIndex extends PerColumnSecondaryIndex
 
     public void deleteColumn(DecoratedKey valueKey, ByteBuffer rowKey, IColumn column)
     {
+        // XXX: ensure this doesn't affect CompactionManager.doCleanupCompaction (only
+        // caller of SecondaryIndexManager.deleteFromIndexes)
+        //if (column.isMarkedForDelete())
+        //    return;
+
         int localDeletionTime = (int) (System.currentTimeMillis() / 1000);
         ColumnFamily cfi = ColumnFamily.create(indexCfs.metadata);
         cfi.addTombstone(rowKey, localDeletionTime, column.timestamp());
