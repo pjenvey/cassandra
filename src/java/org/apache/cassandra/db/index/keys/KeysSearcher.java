@@ -190,6 +190,7 @@ public class KeysSearcher extends SecondaryIndexSearcher
                             logger.debug("Skipping entry {} outside of assigned scan range", dk.token);
                             continue;
                         }
+
                         logger.debug("Returning index hit for {}", dk);
                         ColumnFamily data = baseCfs.getColumnFamily(new QueryFilter(dk, path, filter.initialFilter()));
                         // While the column family we'll get in the end should contains the primary clause column, the initialFilter may not have found it and can thus be null
