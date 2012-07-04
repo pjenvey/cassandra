@@ -371,7 +371,7 @@ public class Table
             {
                 if (cf.isMarkedForDelete())
                 {
-                    // The index will resync later..
+                    // No need to update the secondary index for a delete, it will be resolved @ read time
                     continue;
                 }
                 ColumnFamilyStore cfs = columnFamilyStores.get(cf.id());
@@ -389,7 +389,7 @@ public class Table
                         IColumn column = cf.getColumn(indexedColumn);
                         if (column == null || column.isMarkedForDelete())
                         {
-                            // This inconsistency will be resolved @ read time
+                            // No need to update the secondary index for a delete, it will be resolved @ read time
                             continue;
                         }
                         if (newValueColumns == null)
@@ -409,7 +409,8 @@ public class Table
 
                 cfs.apply(key, cf);
                 if (newValueColumns != null) {
-                    // Read time resolution will throw out obsolete index keys, so no need to synchronized with apply()
+                    // NOTE: The index is inconsistent in between cfs.apply and applyIndexUpdates: this is
+                    // solved by read time resolution
                     cfs.indexManager.applyIndexUpdates(mutation.key(), cf, newValueColumns, null);
                 }
             }
