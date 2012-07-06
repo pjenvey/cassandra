@@ -239,7 +239,7 @@ public class Memtable
         else if (!previous.isMarkedForDelete())
         {
             Set<ByteBuffer> indexedColumns = cfs.indexManager.getIndexedColumns();
-            // XXX: Not checking if the Column itself isMarkedForDelete(). Is it worth the effort?
+            // XXX: Not checking if the Columns themselves are isMarkedForDelete(). Is it worth the effort?
             Set<ByteBuffer> previouslyIndexedColumns = Sets.intersection(indexedColumns, previous.getColumnNames());
             if (previouslyIndexedColumns.size() > 0)
             {
@@ -247,12 +247,12 @@ public class Memtable
                 Set<ByteBuffer> newlyIndexedColumns;
                 if (cf.isMarkedForDelete()) {
                     // It overwrites them all
-                    //delete previouslyIndexedColumns
+                    //delete previouslyIndexedColumns indexes
                 }
                 else if ((newlyIndexedColumns = Sets.intersection(previouslyIndexedColumns, cf.getColumnNames())).size() > 0)
                 {
                     // It overwrites some of them
-                    //delete newlyIndexedColumns
+                    //delete newlyIndexedColumns indexes
                 }
             }
         }
