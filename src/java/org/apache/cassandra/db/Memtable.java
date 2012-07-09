@@ -25,7 +25,6 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.base.Function;
-import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -235,26 +234,6 @@ public class Memtable
             previous = columnFamilies.putIfAbsent(new DecoratedKey(key.token, allocator.clone(key.key)), empty);
             if (previous == null)
                 previous = empty;
-        }
-        else if (!previous.isMarkedForDelete())
-        {
-            Set<ByteBuffer> indexedColumns = cfs.indexManager.getIndexedColumns();
-            // XXX: Not checking if the Column itself isMarkedForDelete(). Is it worth the effort?
-            Set<ByteBuffer> previouslyIndexedColumns = Sets.intersection(indexedColumns, previous.getColumnNames());
-            if (previouslyIndexedColumns.size() > 0)
-            {
-                // This update potentially overwrites indexed columns within the Memtable
-                Set<ByteBuffer> newlyIndexedColumns;
-                if (cf.isMarkedForDelete()) {
-                    // It overwrites them all
-                    //delete previouslyIndexedColumns
-                }
-                else if ((newlyIndexedColumns = Sets.intersection(previouslyIndexedColumns, cf.getColumnNames())).size() > 0)
-                {
-                    // It overwrites some of them
-                    //delete newlyIndexedColumns
-                }
-            }
         }
 
         long sizeDelta = previous.addAllWithSizeDelta(cf, allocator, localCopyFunction);
