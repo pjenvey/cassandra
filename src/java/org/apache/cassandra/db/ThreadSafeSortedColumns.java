@@ -20,15 +20,19 @@ package org.apache.cassandra.db;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.SortedMap;
 import java.util.SortedSet;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ConcurrentNavigableMap;
 
 import com.google.common.base.Function;
 
 import org.apache.cassandra.db.filter.ColumnSlice;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.utils.Allocator;
+import org.apache.cassandra.utils.Pair;
 
 public class ThreadSafeSortedColumns extends AbstractThreadUnsafeSortedColumns implements ISortedColumns
 {
@@ -88,31 +92,39 @@ public class ThreadSafeSortedColumns extends AbstractThreadUnsafeSortedColumns i
     */
     public void addColumn(IColumn column, Allocator allocator)
     {
-        addColumnInternal(column, allocator);
+        addColumn(map, column, allocator);
     }
 
-    private long addColumnInternal(IColumn column, Allocator allocator)
+    static Pair<Integer, IColumn> addColumn(ConcurrentNavigableMap<ByteBuffer, IColumn> map, IColumn column,
+                                            Allocator allocator)
     {
         ByteBuffer name = column.name();
         while (true)
         {
             IColumn oldColumn = map.putIfAbsent(name, column);
             if (oldColumn == null)
-                return column.dataSize();
+                return Pair.create(column.dataSize(), null);
 
             if (oldColumn instanceof SuperColumn)
             {
                 assert column instanceof SuperColumn;
-                long previousSize = oldColumn.dataSize();
+                int previousSize = oldColumn.dataSize();
                 ((SuperColumn) oldColumn).putColumn((SuperColumn)column, allocator);
-                return oldColumn.dataSize() - previousSize;
+                // XXX: SuperColumn handling?
+                return Pair.create(oldColumn.dataSize() - previousSize, null);
             }
             else
             {
                 // calculate reconciled col from old (existing) col and new col
                 IColumn reconciledColumn = column.reconcile(oldColumn, allocator);
+                if (reconciledColumn == oldColumn)
+                {
+                    // No need to update
+                    return Pair.create(0, null);
+                }
+
                 if (map.replace(name, oldColumn, reconciledColumn))
-                    return reconciledColumn.dataSize() - oldColumn.dataSize();
+                    return Pair.create(reconciledColumn.dataSize() - oldColumn.dataSize(), oldColumn);
 
                 // We failed to replace column due to a concurrent update or a concurrent removal. Keep trying.
                 // (Currently, concurrent removal should not happen (only updates), but let us support that anyway.)
@@ -131,11 +143,25 @@ public class ThreadSafeSortedColumns extends AbstractThreadUnsafeSortedColumns i
     @Override
     public long addAllWithSizeDelta(ISortedColumns cm, Allocator allocator, Function<IColumn, IColumn> transformation)
     {
+        return addAllWithResults(cm, allocator, transformation).getSizeDelta();
+    }
+
+    @Override
+    public ISortedColumns.AddResults addAllWithResults(ISortedColumns cm, Allocator allocator,
+                                                       Function<IColumn, IColumn> transformation)
+    {
         delete(cm.getDeletionInfo());
         long sizeDelta = 0;
+        Map<ByteBuffer, IColumn> overwrittenColumns = new LinkedHashMap<ByteBuffer, IColumn>();
         for (IColumn column : cm.getSortedColumns())
-            sizeDelta += addColumnInternal(transformation.apply(column), allocator);
-        return sizeDelta;
+        {
+            Pair<Integer, IColumn> result = addColumn(map, transformation.apply(column), allocator);
+            sizeDelta += result.left;
+            if (result.right != null)
+                overwrittenColumns.put(column.name(), result.right);
+        }
+
+        return new ISortedColumns.AddResults(sizeDelta, overwrittenColumns);
     }
 
     public boolean replace(IColumn oldColumn, IColumn newColumn)

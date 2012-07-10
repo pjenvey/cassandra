@@ -236,8 +236,38 @@ public class Memtable
                 previous = empty;
         }
 
-        long sizeDelta = previous.addAllWithSizeDelta(cf, allocator, localCopyFunction);
-        currentSize.addAndGet(sizeDelta);
+        ISortedColumns.AddResults addResults = previous.addAllWithResults(cf, allocator, localCopyFunction);
+        Set<ByteBuffer> indexedColumns = cfs.indexManager.getIndexedColumns();
+        Map<ByteBuffer, IColumn> overwrittenColumns = addResults.getOverwrittenColumns();
+        // Did the add operation potentially overwrite indexed columns?
+        if (indexedColumns.size() > 0 && overwrittenColumns.size() > 0)
+        {
+                /*
+            for (ByteBuffer name : indexedColumns)
+            {
+                IColumn column = overwrittenColumns.get(name);
+                if (column == null)
+                {
+                    continue;
+                }
+                if (!overwrittenColumns.contains(name))
+                    overwrittenColumns.remove(name);
+                // This indexed column overwrote a value in the memtable, delete its index
+            }
+                */
+            overwrittenColumns.keySet().retainAll(indexedColumns);
+            try
+            {
+                // XXX: deleteFromIndexes/PerRowSecondaryIndex.deleteFromIndex should take just a Collection
+                cfs.indexManager.deleteFromIndexes(key, new ArrayList<IColumn>(overwrittenColumns.values()));
+            }
+            catch (IOException ioe)
+            {
+                throw new RuntimeException(ioe);
+            }
+        }
+
+        currentSize.addAndGet(addResults.getSizeDelta());
         currentOperations.addAndGet((cf.getColumnCount() == 0)
                                     ? cf.isMarkedForDelete() ? 1 : 0
                                     : cf.getColumnCount());
