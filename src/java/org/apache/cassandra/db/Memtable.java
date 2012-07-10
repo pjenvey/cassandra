@@ -242,19 +242,6 @@ public class Memtable
         // Did the add operation potentially overwrite indexed columns?
         if (indexedColumns.size() > 0 && overwrittenColumns.size() > 0)
         {
-                /*
-            for (ByteBuffer name : indexedColumns)
-            {
-                IColumn column = overwrittenColumns.get(name);
-                if (column == null)
-                {
-                    continue;
-                }
-                if (!overwrittenColumns.contains(name))
-                    overwrittenColumns.remove(name);
-                // This indexed column overwrote a value in the memtable, delete its index
-            }
-                */
             overwrittenColumns.keySet().retainAll(indexedColumns);
             try
             {

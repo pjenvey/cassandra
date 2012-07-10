@@ -525,7 +525,6 @@ public class SecondaryIndexManager
             else
             {
                 DecoratedKey valueKey = getIndexKeyFor(column.name(), column.value());
-                logger.debug("REMOVING! {} {}", valueKey, key.key);
                 ((PerColumnSecondaryIndex) index).deleteColumn(valueKey, key.key, column);
             }
         }
