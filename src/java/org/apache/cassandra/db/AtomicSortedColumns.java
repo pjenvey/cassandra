@@ -183,6 +183,7 @@ public class AtomicSortedColumns implements ISortedColumns
          */
         Holder current, modified;
         long sizeDelta;
+        boolean previousIsMarkedForDelete;
         Map<ByteBuffer, IColumn> overwrittenColumns;
 
         main_loop:
@@ -191,6 +192,7 @@ public class AtomicSortedColumns implements ISortedColumns
             sizeDelta = 0;
             overwrittenColumns = new LinkedHashMap<ByteBuffer, IColumn>();
             current = ref.get();
+            previousIsMarkedForDelete = !current.deletionInfo.isLive();
             DeletionInfo newDelInfo = current.deletionInfo.add(cm.getDeletionInfo());
             modified = new Holder(current.map.clone(), newDelInfo);
 
@@ -207,7 +209,7 @@ public class AtomicSortedColumns implements ISortedColumns
         }
         while (!ref.compareAndSet(current, modified));
 
-        return new ISortedColumns.AddResults(sizeDelta, overwrittenColumns);
+        return new ISortedColumns.AddResults(sizeDelta, previousIsMarkedForDelete, overwrittenColumns);
     }
 
     public boolean replace(IColumn oldColumn, IColumn newColumn)

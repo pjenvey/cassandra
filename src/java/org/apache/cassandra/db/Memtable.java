@@ -225,6 +225,7 @@ public class Memtable
     private void resolve(DecoratedKey key, ColumnFamily cf)
     {
         ColumnFamily previous = columnFamilies.get(key);
+        boolean hadPrevious = previous != null;
 
         if (previous == null)
         {
@@ -233,14 +234,49 @@ public class Memtable
             // We'll add the columns later. This avoids wasting works if we get beaten in the putIfAbsent
             previous = columnFamilies.putIfAbsent(new DecoratedKey(key.token, allocator.clone(key.key)), empty);
             if (previous == null)
+                {
+                hadPrevious = previous != null;
                 previous = empty;
+                }
         }
 
         ISortedColumns.AddResults addResults = previous.addAllWithResults(cf, allocator, localCopyFunction);
         Set<ByteBuffer> indexedColumns = cfs.indexManager.getIndexedColumns();
         Map<ByteBuffer, IColumn> overwrittenColumns = addResults.getOverwrittenColumns();
         // Did the add operation potentially overwrite indexed columns?
-        if (indexedColumns.size() > 0 && overwrittenColumns.size() > 0)
+        logger.debug("hadPrevious {} prevdel {}", hadPrevious, addResults.getPreviousIsMarkedForDelete());
+        //if (previous.isMarkedForDelete() && !addResults.getPreviousIsMarkedForDelete())
+        if (previous.isMarkedForDelete())
+        {
+            // The entire row may have been deleted, check every column XXX: what if it
+            // was a CF delete and there was nothing in previously?
+            logger.debug("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
+            for (ByteBuffer name: overwrittenColumns.keySet())
+                try { logger.debug("overwritten: {}", org.apache.cassandra.utils.ByteBufferUtil.string(name)); } catch (Exception e) { throw new RuntimeException(e); }
+            List<IColumn> allColumns = new ArrayList<IColumn>(indexedColumns.size());
+            for (ByteBuffer name: indexedColumns)
+            {
+                // XXX: we get from previous here but what if previous was deleted? Seems
+                // like we have to look at the actual deletionInfo of the result?
+                IColumn previousColumn = previous.getColumn(name);
+                if (previousColumn != null && previous.deletionInfo().isDeleted(previousColumn))
+                    allColumns.add(previousColumn);
+                if (previous.getColumn(name) != null)
+                    logger.debug("@@ {}", previous.deletionInfo().isDeleted(previous.getColumn(name)));
+                logger.debug("(( {}", previousColumn);
+            }
+            try
+            {
+                // XXX: deleteFromIndexes/PerRowSecondaryIndex.deleteFromIndex should take just a Collection
+                //cfs.indexManager.deleteFromIndexes(key, new ArrayList<IColumn>(overwrittenColumns.values()));
+                cfs.indexManager.deleteFromIndexes(key, allColumns);
+            }
+            catch (IOException ioe)
+            {
+                throw new RuntimeException(ioe);
+            }
+        }
+        else if (indexedColumns.size() > 0 && overwrittenColumns.size() > 0)
         {
             overwrittenColumns.keySet().retainAll(indexedColumns);
             try

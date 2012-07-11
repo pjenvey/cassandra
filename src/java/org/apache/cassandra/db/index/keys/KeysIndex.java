@@ -102,6 +102,7 @@ public class KeysIndex extends PerColumnSecondaryIndex
         indexCfs.apply(valueKey, cfi);
         if (logger.isDebugEnabled())
             logger.debug("removed index entry for cleaned-up value {}:{}", valueKey, cfi);
+        Thread.dumpStack();
     }
 
     public void insertColumn(DecoratedKey valueKey, ByteBuffer rowKey, IColumn column)

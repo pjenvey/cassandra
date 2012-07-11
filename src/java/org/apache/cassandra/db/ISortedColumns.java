@@ -190,15 +190,19 @@ public interface ISortedColumns extends IIterableColumns
     public class AddResults
     {
         private final long sizeDelta;
+        private final boolean previousIsMarkedForDelete;
         private final Map<ByteBuffer, IColumn> overwrittenColumns;
 
-        public AddResults(long sizeDelta, Map<ByteBuffer, IColumn> overwrittenColumns)
+        public AddResults(long sizeDelta, boolean previousIsMarkedForDelete,
+                          Map<ByteBuffer, IColumn> overwrittenColumns)
         {
             this.sizeDelta = sizeDelta;
+            this.previousIsMarkedForDelete = previousIsMarkedForDelete;
             this.overwrittenColumns = overwrittenColumns;
         }
 
         public long getSizeDelta() { return sizeDelta; }
+        public boolean getPreviousIsMarkedForDelete() { return previousIsMarkedForDelete; }
         public Map<ByteBuffer, IColumn> getOverwrittenColumns() { return overwrittenColumns; }
     }
 }
