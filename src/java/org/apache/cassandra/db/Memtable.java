@@ -240,15 +240,10 @@ public class Memtable
         Set<ByteBuffer> indexedColumns = cfs.indexManager.getIndexedColumns();
         Map<ByteBuffer, IColumn> overwrittenColumns = addResults.getOverwrittenColumns();
         // Did the add operation potentially overwrite indexed columns?
-        logger.debug("hadPrevious {} prevdel {}", hadPrevious, addResults.getPreviousIsMarkedForDelete());
-        //if (previous.isMarkedForDelete() && !addResults.getPreviousIsMarkedForDelete())
         if (previous.isMarkedForDelete())
         {
             // The entire row may have been deleted, check every column XXX: what if it
             // was a CF delete and there was nothing in previously?
-            logger.debug("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^");
-            for (ByteBuffer name: overwrittenColumns.keySet())
-                try { logger.debug("overwritten: {}", org.apache.cassandra.utils.ByteBufferUtil.string(name)); } catch (Exception e) { throw new RuntimeException(e); }
             List<IColumn> allColumns = new ArrayList<IColumn>(indexedColumns.size());
             for (ByteBuffer name: indexedColumns)
             {
@@ -257,14 +252,10 @@ public class Memtable
                 IColumn previousColumn = previous.getColumn(name);
                 if (previousColumn != null && previous.deletionInfo().isDeleted(previousColumn))
                     allColumns.add(previousColumn);
-                if (previous.getColumn(name) != null)
-                    logger.debug("@@ {}", previous.deletionInfo().isDeleted(previous.getColumn(name)));
-                logger.debug("(( {}", previousColumn);
             }
             try
             {
                 // XXX: deleteFromIndexes/PerRowSecondaryIndex.deleteFromIndex should take just a Collection
-                //cfs.indexManager.deleteFromIndexes(key, new ArrayList<IColumn>(overwrittenColumns.values()));
                 cfs.indexManager.deleteFromIndexes(key, allColumns);
             }
             catch (IOException ioe)
