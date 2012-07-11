@@ -202,21 +202,15 @@ public class KeysSearcher extends SecondaryIndexSearcher
                             if (logger.isDebugEnabled())
                                 logger.debug("Updating stale index entry for {} {}", indexKey, column.name());
 
-                            // XXX: refactor this cut&paste out of SecondaryIndexManager.applyIndexUpdates
-                            if (index instanceof org.apache.cassandra.db.index.PerRowSecondaryIndex)
+                            try
                             {
-                                throw new RuntimeException("Not Implemented");
+                                // XXX: deleteFromIndexes does a couple unnecessary lookups (of data we already
+                                // have on hand)
+                                indexManager.deleteFromIndexes(dk, Arrays.asList(indexedColumn));
                             }
-                            else
+                            catch (IOException ioe)
                             {
-                                try
-                                {
-                                    ((org.apache.cassandra.db.index.PerColumnSecondaryIndex) index).deleteColumn(indexKey, column.name(), indexedColumn);
-                                }
-                                catch (IOException ioe)
-                                {
-                                    throw new RuntimeException(ioe);
-                                }
+                                throw new RuntimeException(ioe);
                             }
                             continue;
                         }

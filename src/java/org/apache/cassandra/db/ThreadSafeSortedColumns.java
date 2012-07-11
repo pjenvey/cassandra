@@ -110,7 +110,6 @@ public class ThreadSafeSortedColumns extends AbstractThreadUnsafeSortedColumns i
                 assert column instanceof SuperColumn;
                 int previousSize = oldColumn.dataSize();
                 ((SuperColumn) oldColumn).putColumn((SuperColumn)column, allocator);
-                // XXX: SuperColumn handling?
                 return Pair.create(oldColumn.dataSize() - previousSize, null);
             }
             else
