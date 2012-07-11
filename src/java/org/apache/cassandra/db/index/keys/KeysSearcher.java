@@ -197,19 +197,10 @@ public class KeysSearcher extends SecondaryIndexSearcher
                         if (data == null)
                             data = ColumnFamily.create(baseCfs.metadata);
                         IColumn indexedColumn = data.getColumn(primary.column_name);
-                        /*
-                        try {
-                        logger.debug("!! name: {} value: {}", org.apache.cassandra.utils.ByteBufferUtil.string(indexedColumn.name()), org.apache.cassandra.utils.ByteBufferUtil.string(indexedColumn.value()));
-                        logger.debug("!! cf marked: {} column marked: {}", data.isMarkedForDelete(), indexedColumn.isMarkedForDelete());
-                        } catch (java.nio.charset.CharacterCodingException cce) { throw new RuntimeException(cce);}
-                        */
-
                         if (indexedColumn == null || !primary.value.equals(indexedColumn.value()))
                         {
                             if (logger.isDebugEnabled())
                                 logger.debug("Updating stale index entry for {} {}", indexKey, column.name());
-                            if (logger.isDebugEnabled())
-                                logger.debug("indexedColumn: {}", indexedColumn);
 
                             try
                             {

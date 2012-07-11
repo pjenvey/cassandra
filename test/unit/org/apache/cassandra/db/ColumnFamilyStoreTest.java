@@ -392,43 +392,6 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         assert "k1".equals( key );
     }
 
-    //@Test
-    public void testIndexDeletionsWithFlush() throws IOException, ExecutionException, InterruptedException
-    {
-        // XXX: Seems like this test is flakey, seems like compaction can kick in to break it?
-        ColumnFamilyStore cfs = Table.open("Keyspace3").getColumnFamilyStore("Indexed1");
-        RowMutation rm;
-
-        logger.debug("flush a column out of the Memtable");
-        rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
-        rm.add(new QueryPath("Indexed1", null, ByteBufferUtil.bytes("birthdate")), ByteBufferUtil.bytes(1L), 0);
-        rm.apply();
-        cfs.forceBlockingFlush();
-
-        logger.debug("delete the entire row");
-        rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
-        rm.delete(new QueryPath("Indexed1"), 3);
-        rm.apply();
-
-
-        /*
-        logger.debug("ensure the index entry wasn't touched yet");
-        DecoratedKey indexKey = cfs.indexManager.getIndexKeyFor(ByteBufferUtil.bytes("birthdate"), ByteBufferUtil.bytes(1L));
-        ColumnFamily indexCf = cfs.indexManager.baseCfs.getColumnFamily(QueryFilter.getIdentityFilter(ROW, new QueryPath("Indexed1")));
-        IColumn indexColumn = indexCf.getColumn(ByteBufferUtil.bytes(1L));
-        */
-
-        logger.debug("ensure read time resolution");
-        IndexExpression expr = new IndexExpression(ByteBufferUtil.bytes("birthdate"), IndexOperator.EQ, ByteBufferUtil.bytes(1L));
-        List<IndexExpression> clause = Arrays.asList(expr);
-        IFilter filter = new IdentityQueryFilter();
-        Range<RowPosition> range = Util.range("", "");
-        List<Row> rows = cfs.search(clause, range, 100, filter);
-        assert rows.size() == 0 : StringUtils.join(rows, ",");
-
-        //logger.debug("ensure read time resolution in fact deleted the index entry");
-    }
-
     @Test
     public void testIndexUpdate() throws IOException
     {

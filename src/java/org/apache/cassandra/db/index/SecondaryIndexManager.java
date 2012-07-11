@@ -508,7 +508,6 @@ public class SecondaryIndexManager
 
         for (IColumn column : indexedColumnsInRow)
         {
-            logger.debug("column {} indexesByColumn {}", column, indexesByColumn);
             SecondaryIndex index = indexesByColumn.get(column.name());
 
             if (index == null)

@@ -225,7 +225,6 @@ public class Memtable
     private void resolve(DecoratedKey key, ColumnFamily cf)
     {
         ColumnFamily previous = columnFamilies.get(key);
-        boolean hadPrevious = previous != null;
 
         if (previous == null)
         {
@@ -234,10 +233,7 @@ public class Memtable
             // We'll add the columns later. This avoids wasting works if we get beaten in the putIfAbsent
             previous = columnFamilies.putIfAbsent(new DecoratedKey(key.token, allocator.clone(key.key)), empty);
             if (previous == null)
-                {
-                hadPrevious = previous != null;
                 previous = empty;
-                }
         }
 
         ISortedColumns.AddResults addResults = previous.addAllWithResults(cf, allocator, localCopyFunction);
