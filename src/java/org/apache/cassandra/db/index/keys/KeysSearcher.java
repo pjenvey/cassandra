@@ -204,23 +204,20 @@ public class KeysSearcher extends SecondaryIndexSearcher
 
                             try
                             {
-                                // XXX: deleteFromIndexes does a couple unnecessary lookups (of data we already
-                                // have on hand)
-                                //indexManager.deleteFromIndexes(dk, Arrays.asList(indexedColumn));
-                                indexManager.deleteFromIndexes(dk, Arrays.asList(column));
+                                // XXX: deleteFromIndexes doesn't work here, not made to
+                                // work from the index 'column' (can't use 'indexedColumn'
+                                // here, it could be null). it does a couple unnecessary
+                                // lookups (of data we already have on hand) anyway
+                                //indexManager.deleteFromIndexes(dk, Arrays.asList(column));
                                 // XXX: refactor this cut&paste out of SecondaryIndexManager.applyIndexUpdates
-                                /*
                                 if (index instanceof org.apache.cassandra.db.index.PerRowSecondaryIndex)
                                 {
                                     throw new RuntimeException("Not Implemented");
                                 }
                                 else
                                 {
-                                    // XXX: indexedColumn can be null
                                     ((org.apache.cassandra.db.index.PerColumnSecondaryIndex) index).deleteColumn(indexKey, column.name(), column);
                                 }
-                                */
-
                             }
                             catch (IOException ioe)
                             {
