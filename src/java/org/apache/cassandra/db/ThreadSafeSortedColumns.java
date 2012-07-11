@@ -95,6 +95,12 @@ public class ThreadSafeSortedColumns extends AbstractThreadUnsafeSortedColumns i
         addColumn(map, column, allocator);
     }
 
+    /**
+     * Add a Column to an ISortedColumn's ConcurrentNavigableMap.
+     *
+     * @return a Pair<Integer, IColumn> consisting of the data size delta of the operation and the Column that
+     * was replaced (or null if not applicable)
+     */
     static Pair<Integer, IColumn> addColumn(ConcurrentNavigableMap<ByteBuffer, IColumn> map, IColumn column,
                                             Allocator allocator)
     {
