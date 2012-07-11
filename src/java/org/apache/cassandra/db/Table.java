@@ -369,13 +369,6 @@ public class Table
             DecoratedKey key = StorageService.getPartitioner().decorateKey(mutation.key());
             for (ColumnFamily cf : mutation.getColumnFamilies())
             {
-                /*
-                if (cf.isMarkedForDelete())
-                {
-                    // XXX: No need to update the secondary index for a delete, it will be resolved @ read time
-                    continue;
-                }
-                */
                 ColumnFamilyStore cfs = columnFamilyStores.get(cf.id());
                 if (cfs == null)
                 {
@@ -384,14 +377,12 @@ public class Table
                 }
 
                 SortedSet<ByteBuffer> newValueColumns = null;
-                // XXX: No need to update secondary indexes for a delete, it will be resolved @ read time
-                // XXX: does cf.isMarkedForDelete() == true completely guarantee no column writes?
-                //if (updateIndexes && !cf.isMarkedForDelete())
                 if (updateIndexes)
                 {
                     for (ByteBuffer indexedColumn : cfs.indexManager.getIndexedColumns())
                     {
                         IColumn column = cf.getColumn(indexedColumn);
+                        // XXX: Is there any other false positive case here?
                         if (column == null || column.isMarkedForDelete())
                         {
                             // No need to update the secondary index for a delete, it will be resolved @ read time
