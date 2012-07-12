@@ -191,11 +191,24 @@ public interface ISortedColumns extends IIterableColumns
     {
         private final long sizeDelta;
         private final Map<ByteBuffer, IColumn> overwrittenColumns;
+        private final DeletionInfo oldDeletionInfo;
+        private final DeletionInfo newDeletionInfo;
 
-        public AddResults(long sizeDelta, Map<ByteBuffer, IColumn> overwrittenColumns)
+        public AddResults(long sizeDelta, Map<ByteBuffer, IColumn> overwrittenColumns, DeletionInfo oldDeletionInfo,
+                          DeletionInfo newDeletionInfo)
         {
             this.sizeDelta = sizeDelta;
             this.overwrittenColumns = overwrittenColumns;
+            this.oldDeletionInfo = oldDeletionInfo;
+            this.newDeletionInfo = newDeletionInfo;
+        }
+
+        /**
+         * Determine if the specified Column was deleted by this add operation (and wasn't previously marked
+         * for deletion).
+         */
+        public boolean columnWasDeleted(IColumn column) {
+            return !oldDeletionInfo.isDeleted(column) && newDeletionInfo.isDeleted(column);
         }
 
         public long getSizeDelta() { return sizeDelta; }

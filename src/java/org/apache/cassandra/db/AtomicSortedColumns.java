@@ -184,6 +184,7 @@ public class AtomicSortedColumns implements ISortedColumns
         Holder current, modified;
         long sizeDelta;
         Map<ByteBuffer, IColumn> overwrittenColumns;
+        DeletionInfo oldDelInfo, newDelInfo;
 
         main_loop:
         do
@@ -191,7 +192,8 @@ public class AtomicSortedColumns implements ISortedColumns
             sizeDelta = 0;
             overwrittenColumns = new LinkedHashMap<ByteBuffer, IColumn>();
             current = ref.get();
-            DeletionInfo newDelInfo = current.deletionInfo.add(cm.getDeletionInfo());
+            oldDelInfo = current.deletionInfo;
+            newDelInfo = current.deletionInfo.add(cm.getDeletionInfo());
             modified = new Holder(current.map.clone(), newDelInfo);
 
             for (IColumn column : cm.getSortedColumns())
@@ -207,7 +209,7 @@ public class AtomicSortedColumns implements ISortedColumns
         }
         while (!ref.compareAndSet(current, modified));
 
-        return new ISortedColumns.AddResults(sizeDelta, overwrittenColumns);
+        return new ISortedColumns.AddResults(sizeDelta, overwrittenColumns, oldDelInfo, newDelInfo);
     }
 
     public boolean replace(IColumn oldColumn, IColumn newColumn)

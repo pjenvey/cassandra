@@ -240,47 +240,43 @@ public class Memtable
         Set<ByteBuffer> indexedColumns = cfs.indexManager.getIndexedColumns();
         Map<ByteBuffer, IColumn> overwrittenColumns = addResults.getOverwrittenColumns();
         // Did the add operation potentially overwrite indexed columns?
-        if (previous.isMarkedForDelete())
+        if (cf.isMarkedForDelete())
         {
-            // The entire row may have been deleted, check every column XXX: what if it
-            // was a CF delete and there was nothing in previously?
+            // The entire row may have been deleted, check every indexed column for a *new* deletion
             List<IColumn> allColumns = new ArrayList<IColumn>(indexedColumns.size());
             for (ByteBuffer name: indexedColumns)
             {
-                // XXX: we get from previous here but what if previous was deleted? Seems
-                // like we have to look at the actual deletionInfo of the result?
-                IColumn previousColumn = previous.getColumn(name);
-                if (previousColumn != null && previous.deletionInfo().isDeleted(previousColumn))
-                    allColumns.add(previousColumn);
+                IColumn column = previous.getColumn(name);
+                // a Column only existing in the SSTable (column == null) doesn't need an immediate index
+                // deletion
+                if (column != null && addResults.columnWasDeleted(column))
+                    allColumns.add(column);
             }
-            try
-            {
-                // XXX: deleteFromIndexes/PerRowSecondaryIndex.deleteFromIndex should take just a Collection
-                cfs.indexManager.deleteFromIndexes(key, allColumns);
-            }
-            catch (IOException ioe)
-            {
-                throw new RuntimeException(ioe);
-            }
+            deleteFromIndexes(key, allColumns);
         }
         else if (indexedColumns.size() > 0 && overwrittenColumns.size() > 0)
         {
             overwrittenColumns.keySet().retainAll(indexedColumns);
-            try
-            {
-                // XXX: deleteFromIndexes/PerRowSecondaryIndex.deleteFromIndex should take just a Collection
-                cfs.indexManager.deleteFromIndexes(key, new ArrayList<IColumn>(overwrittenColumns.values()));
-            }
-            catch (IOException ioe)
-            {
-                throw new RuntimeException(ioe);
-            }
+            // XXX: deleteFromIndexes/PerRowSecondaryIndex.deleteFromIndex should take just a Collection
+            deleteFromIndexes(key, new ArrayList<IColumn>(overwrittenColumns.values()));
         }
 
         currentSize.addAndGet(addResults.getSizeDelta());
         currentOperations.addAndGet((cf.getColumnCount() == 0)
                                     ? cf.isMarkedForDelete() ? 1 : 0
                                     : cf.getColumnCount());
+    }
+
+    private void deleteFromIndexes(DecoratedKey key, List<IColumn> indexedColumnsInRow)
+    {
+        try
+        {
+            cfs.indexManager.deleteFromIndexes(key, indexedColumnsInRow);
+        }
+        catch (IOException ioe)
+        {
+            throw new RuntimeException(ioe);
+        }
     }
 
     // for debugging

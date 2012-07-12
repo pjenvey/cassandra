@@ -155,7 +155,9 @@ public class ThreadSafeSortedColumns extends AbstractThreadUnsafeSortedColumns i
     public ISortedColumns.AddResults addAllWithResults(ISortedColumns cm, Allocator allocator,
                                                        Function<IColumn, IColumn> transformation)
     {
+        DeletionInfo oldDelInfo = getDeletionInfo();
         delete(cm.getDeletionInfo());
+        DeletionInfo newDelInfo = getDeletionInfo();
         long sizeDelta = 0;
         Map<ByteBuffer, IColumn> overwrittenColumns = new LinkedHashMap<ByteBuffer, IColumn>();
         for (IColumn column : cm.getSortedColumns())
@@ -166,7 +168,7 @@ public class ThreadSafeSortedColumns extends AbstractThreadUnsafeSortedColumns i
                 overwrittenColumns.put(column.name(), result.right);
         }
 
-        return new ISortedColumns.AddResults(sizeDelta, overwrittenColumns);
+        return new ISortedColumns.AddResults(sizeDelta, overwrittenColumns, oldDelInfo, newDelInfo);
     }
 
     public boolean replace(IColumn oldColumn, IColumn newColumn)

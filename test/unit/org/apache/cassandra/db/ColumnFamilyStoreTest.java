@@ -390,6 +390,30 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         assert rows.size() == 1 : StringUtils.join(rows, ",");
         key = ByteBufferUtil.string(rows.get(0).key.key);
         assert "k1".equals( key );
+
+        logger.debug("try 2 deletions");
+        rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
+        rm.delete(new QueryPath("Indexed1", null, ByteBufferUtil.bytes("birthdate")), 5);
+        rm.apply();
+        rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
+        rm.delete(new QueryPath("Indexed1", null, ByteBufferUtil.bytes("birthdate")), 6);
+        rm.apply();
+        rows = cfs.search(clause, range, 100, filter);
+        assert rows.isEmpty();
+
+        logger.debug("try 2 row deletions");
+        rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
+        rm.add(new QueryPath("Indexed1", null, ByteBufferUtil.bytes("birthdate")), ByteBufferUtil.bytes(1L), 7);
+        rm.apply();
+
+        rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
+        rm.delete(new QueryPath("Indexed1"), 8);
+        rm.apply();
+        rm = new RowMutation("Keyspace3", ByteBufferUtil.bytes("k1"));
+        rm.delete(new QueryPath("Indexed1"), 9);
+        rm.apply();
+        rows = cfs.search(clause, range, 100, filter);
+        assert rows.isEmpty() : StringUtils.join(rows, ",");
     }
 
     @Test
