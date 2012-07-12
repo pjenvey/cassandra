@@ -255,7 +255,6 @@ public class Memtable
     {
         Set<ByteBuffer> indexedColumns = cfs.indexManager.getIndexedColumns();
 
-        // Did this add operation potentially overwrite indexed columns?
         if (indexedColumns.size() > 0)
         {
             List<IColumn> overwrittenIndexedColumns = null;
