@@ -276,7 +276,6 @@ public class Memtable
             {
                 Map<ByteBuffer, IColumn> overwrittenColumns = addResults.getOverwrittenColumns();
                 overwrittenColumns.keySet().retainAll(indexedColumns);
-                // XXX: deleteFromIndexes/PerRowSecondaryIndex.deleteFromIndex should take just a Collection
                 overwrittenIndexedColumns = new ArrayList<IColumn>(overwrittenColumns.values());
             }
 
