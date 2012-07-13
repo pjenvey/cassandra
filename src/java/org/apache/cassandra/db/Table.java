@@ -376,38 +376,15 @@ public class Table
                     continue;
                 }
 
-                SortedSet<ByteBuffer> newValueColumns = null;
-                if (updateIndexes)
-                {
-                    for (ByteBuffer indexedColumn : cfs.indexManager.getIndexedColumns())
-                    {
-                        IColumn column = cf.getColumn(indexedColumn);
-                        // XXX: Is there any other false positive case here?
-                        if (column == null || column.isMarkedForDelete())
-                        {
-                            // No need to update the secondary index for a delete, it will be resolved @ read time
-                            continue;
-                        }
-                        if (newValueColumns == null)
-                            newValueColumns = new TreeSet<ByteBuffer>(cf.getComparator());
-                        newValueColumns.add(column.name());
-                        if (logger.isDebugEnabled())
-                        {
-                            // can't actually use validator to print value here, because we overload value
-                            // for deletion timestamp as well (which may not be a well-formed value for the column type)
-                            ByteBuffer value = column == null ? null : column.value(); // may be null on row-level deletion
-                            logger.debug(String.format("mutating indexed column %s value %s",
-                                                       cf.getComparator().getString(indexedColumn), // XXX: getString blah
-                                                       value == null ? "null" : ByteBufferUtil.bytesToHex(value)));
-                        }
-                    }
-                }
+                SortedSet<ByteBuffer> indexAdditionColumns = updateIndexes
+                        ? findIndexAdditions(cf, cfs.indexManager.getIndexedColumns())
+                        : null;
 
                 cfs.apply(key, cf);
-                if (newValueColumns != null) {
+                if (indexAdditionColumns != null) {
                     // NOTE: The index is inconsistent in between cfs.apply and applyIndexUpdates: this is
                     // solved by read time resolution
-                    cfs.indexManager.applyIndexUpdates(mutation.key(), cf, newValueColumns, null);
+                    cfs.indexManager.applyIndexUpdates(mutation.key(), cf, indexAdditionColumns, null);
                 }
             }
         }
@@ -415,6 +392,28 @@ public class Table
         {
             switchLock.readLock().unlock();
         }
+    }
+
+    /**
+     * Return the names of a RowMutation's ColumnFamily's Columns that require new secondary index entries.
+     */
+    private SortedSet<ByteBuffer> findIndexAdditions(ColumnFamily cf, SortedSet<ByteBuffer> indexedColumns)
+    {
+        SortedSet<ByteBuffer> columns = null;
+
+        for (ByteBuffer indexedColumn : indexedColumns)
+        {
+            IColumn column = cf.getColumn(indexedColumn);
+            if (column == null || column.isMarkedForDelete())
+            {
+                // Columns marked for deletion will have their indexes resolved @ read time
+                continue;
+            }
+            if (columns == null)
+                columns = new TreeSet<ByteBuffer>(cf.getComparator());
+            columns.add(column.name());
+        }
+        return columns;
     }
 
     private static ColumnFamily readCurrentIndexedColumns(DecoratedKey key, ColumnFamilyStore cfs, SortedSet<ByteBuffer> mutatedIndexedColumns)
