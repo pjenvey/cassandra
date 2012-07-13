@@ -267,7 +267,8 @@ public class Memtable
                 {
                     IColumn column = previous.getColumn(name);
                     // a Column only existing in the SSTable (column == null) doesn't need an immediate index
-                    // deletion. XXX: we might issue deletes for Columns *not* previously in the Memtable here
+                    // deletion. columnWasDeleted returns true for Columns *not* previously in the Memtable
+                    // but this is of no consequence
                     if (column != null && addResults.columnWasDeleted(column))
                         overwrittenIndexedColumns.add(column);
                 }
