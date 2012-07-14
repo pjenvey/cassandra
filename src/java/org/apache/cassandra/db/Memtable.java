@@ -274,7 +274,7 @@ public class Memtable
             for (ByteBuffer name: indexedColumns)
             {
                 IColumn column = previous.getColumn(name);
-                if (column == null || !addResults.addedTombstone(column))
+                if (column == null || !addResults.addedTombstoneFor(column))
                     // The column wasn't already in the Memtable, was already tombstoned, or this row
                     // deletion didn't affect it (bad timestamp). No index deletion necessary
                     continue;
