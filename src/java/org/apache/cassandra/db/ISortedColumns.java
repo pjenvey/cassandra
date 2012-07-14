@@ -207,7 +207,7 @@ public interface ISortedColumns extends IIterableColumns
          * Determine if the specified Column was deleted by this add operation (and wasn't previously marked
          * for deletion).
          */
-        public boolean columnWasDeleted(IColumn column) {
+        public boolean addedTombstone(IColumn column) {
             return !oldDeletionInfo.isDeleted(column) && newDeletionInfo.isDeleted(column);
         }
 
