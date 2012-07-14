@@ -23,6 +23,7 @@ import java.util.*;
 
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.*;
+import org.apache.cassandra.db.index.PerColumnSecondaryIndex;
 import org.apache.cassandra.db.index.SecondaryIndex;
 import org.apache.cassandra.db.index.SecondaryIndexManager;
 import org.apache.cassandra.db.index.SecondaryIndexSearcher;
@@ -196,39 +197,43 @@ public class KeysSearcher extends SecondaryIndexSearcher
                         // While the column family we'll get in the end should contains the primary clause column, the initialFilter may not have found it and can thus be null
                         if (data == null)
                             data = ColumnFamily.create(baseCfs.metadata);
+
                         IColumn indexedColumn = data.getColumn(primary.column_name);
                         if (indexedColumn == null || !primary.value.equals(indexedColumn.value()))
                         {
                             if (logger.isDebugEnabled())
-                                logger.debug("Updating stale index entry for {} {}", indexKey, column.name());
-
-                            try
                             {
-                                // XXX: deleteFromIndexes doesn't work here, not made to
-                                // work from the index 'column' (can't use 'indexedColumn'
-                                // here, it could be null). it does a couple unnecessary
-                                // lookups (of data we already have on hand) anyway
-                                //indexManager.deleteFromIndexes(dk, Arrays.asList(column));
-                                // XXX: refactor this cut&paste out of SecondaryIndexManager.applyIndexUpdates
-                                if (index instanceof org.apache.cassandra.db.index.PerRowSecondaryIndex)
-                                {
-                                    throw new RuntimeException("Not Implemented");
-                                }
-                                else
-                                {
-                                    ((org.apache.cassandra.db.index.PerColumnSecondaryIndex) index).deleteColumn(indexKey, column.name(), column);
-                                }
+                                String columnDesc = indexedColumn == null || indexedColumn.isMarkedForDelete()
+                                        ? "deleted column"
+                                        : String.format("%s %s", baseCfs.getComparator().getString(indexedColumn.name()),
+                                                        ByteBufferUtil.bytesToHex(indexedColumn.value()));
+                                logger.debug("Read-resolving stale index entry {} for {}",
+                                             ByteBufferUtil.bytesToHex(indexKey.key),
+                                             columnDesc);
                             }
-                            catch (IOException ioe)
-                            {
-                                throw new RuntimeException(ioe);
-                            }
+                            deleteIndexColumn(index, indexKey, column);
                             continue;
                         }
                         return new Row(dk, data);
                     }
                  }
              }
+
+            private void deleteIndexColumn(SecondaryIndex index, DecoratedKey indexKey, IColumn indexColumn)
+            {
+                if (!(index instanceof PerColumnSecondaryIndex))
+                    throw new RuntimeException("KeysSearcher operates on PerColumnSecondaryIndexes, not "
+                                               + index.getClass().getName());
+                PerColumnSecondaryIndex pcsIndex = (PerColumnSecondaryIndex) index;
+                try
+                {
+                    pcsIndex.deleteColumn(indexKey, indexColumn.name(), indexColumn);
+                }
+                catch (IOException ioe)
+                {
+                    throw new RuntimeException(ioe);
+                }
+            }
 
             public void close() throws IOException {}
         };
