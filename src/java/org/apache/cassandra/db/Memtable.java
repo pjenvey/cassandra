@@ -254,7 +254,7 @@ public class Memtable
                                       ISortedColumns.AddResults addResults)
     {
         Set<ByteBuffer> indexedColumns = cfs.indexManager.getIndexedColumns();
-        if (indexedColumns.size() <= 0)
+        if (indexedColumns.size() == 0)
             return;
 
         Map<ByteBuffer, IColumn> overwrittenColumns = addResults.getOverwrittenColumns();
