@@ -82,7 +82,7 @@ import org.apache.cassandra.utils.WrappedRunnable;
 
 public class ColumnFamilyStoreTest extends SchemaLoader
 {
-    private static Logger logger = LoggerFactory.getLogger(RecoveryManager2Test.class);
+    private static Logger logger = LoggerFactory.getLogger(ColumnFamilyStoreTest.class);
 
     static byte[] bytes1, bytes2;
 
