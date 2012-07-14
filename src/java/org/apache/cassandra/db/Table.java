@@ -381,11 +381,10 @@ public class Table
                         : null;
 
                 cfs.apply(key, cf);
-                if (indexAdditionColumns != null) {
+                if (indexAdditionColumns != null)
                     // NOTE: The index is inconsistent in between cfs.apply and applyIndexUpdates: this is
                     // solved by read time resolution
                     cfs.indexManager.applyIndexUpdates(mutation.key(), cf, indexAdditionColumns, null);
-                }
             }
         }
         finally
