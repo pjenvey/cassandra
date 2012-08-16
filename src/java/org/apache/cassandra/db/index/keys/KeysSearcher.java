@@ -199,7 +199,8 @@ public class KeysSearcher extends SecondaryIndexSearcher
                             data = ColumnFamily.create(baseCfs.metadata);
 
                         IColumn indexedColumn = data.getColumn(primary.column_name);
-                        if (indexedColumn == null || !primary.value.equals(indexedColumn.value()))
+                        if (indexedColumn == null || indexedColumn.isMarkedForDelete()
+                            || !primary.value.equals(indexedColumn.value()))
                         {
                             if (logger.isDebugEnabled())
                             {

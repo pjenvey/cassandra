@@ -123,10 +123,8 @@ public class ThreadSafeSortedColumns extends AbstractThreadUnsafeSortedColumns i
                 // calculate reconciled col from old (existing) col and new col
                 IColumn reconciledColumn = column.reconcile(oldColumn, allocator);
                 if (reconciledColumn == oldColumn)
-                {
                     // No need to update
                     return Pair.create(0, null);
-                }
 
                 if (map.replace(name, oldColumn, reconciledColumn))
                     return Pair.create(reconciledColumn.dataSize() - oldColumn.dataSize(), oldColumn);
